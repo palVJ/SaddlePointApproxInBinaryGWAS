@@ -7,86 +7,21 @@ library(reshape2)
 library(ggpubr)
 library(viridis)
 
-source("~/kode_intercept copy/CGFs.R")
-source("~/kode_intercept copy/singlesadle.R")
-source("~/kode_intercept copy/doublesadle.R")
-source("~/kode_intercept copy/twosided_test.R")
-source("~/kode_intercept copy/exact_test_intercept.R")
-source("~/kode_intercept copy/exact_t1error.R")
+source("~/SaddlePointApproxInBinaryGWAS/R/ExactAndCondValidIntercept/CGFs.R")
+source("~/SaddlePointApproxInBinaryGWAS/R/ExactAndCondValidIntercept/singlesadle.R")
+source("~/SaddlePointApproxInBinaryGWAS/R/ExactAndCondValidIntercept/doublesadle.R")
+source("~/SaddlePointApproxInBinaryGWAS/R/ExactAndCondValidIntercept/twosided_test.R")
+source("~/SaddlePointApproxInBinaryGWAS/R/ExactAndCondValidIntercept/exact_test_intercept.R")
+source("~/SaddlePointApproxInBinaryGWAS/R/ExactAndCondValidIntercept/exact_t1error.R")
 
 
-
-midp = function(uid,uvals,ran,pm){
-    u = uvals[uid]
-    
-    if(u > abs(ran[1])){
-        # Positive observation and right-tailed test
-        
-        if(uid == length(pm)){
-            pu = pm[length(pm)]
-        }else{
-            pu = 0.5*sum(pm[uid:length(pm)]) + 0.5*sum(pm[(uid+1):length(pm)])
-        }
-        return(pu)
-    }else if(u > 0){
-        # Positive observation and two-tailed test
-        uneg = u-sign(u)*ceiling(2*abs(u))
-        unegid = which(round(uvals,2) == round(uneg,2))
-        
-        if(uid == length(pm)){
-            pu = pm[length(pm)]
-        }else{
-            pu = 0.5*sum(pm[uid:length(pm)]) + 0.5*sum(pm[(uid+1):length(pm)])
-        }
-        
-        if(unegid == 1){
-            pl = pm[1]
-        }else{
-            pl = 0.5*sum(pm[1:unegid]) + 0.5*sum(pm[1:(unegid-1)])
-        }
-        return(pu + pl)
-    }else if(u < -1*ran[2]){
-        # Negative observation and left-tailed test
-        
-        if(uid == 1){
-            pl = pm[1]
-        }else{
-            pl = 0.5*sum(pm[1:uid]) + 0.5*sum(pm[1:(uid-1)])
-        }
-
-        return(pl)
-    }else{
-        # Negative observation and two-tailed test
-        upos = u-sign(u)*ceiling(2*abs(u))
-        uposid = which(round(uvals,2) == round(upos,2))
-        
-        if(uposid == length(pm)){
-            pu = pm[length(pm)]
-        }else{
-            pu = 0.5*sum(pm[uposid:length(pm)]) + 0.5*sum(pm[(uposid+1):length(pm)])
-        }
-        
-        if(uid == 1){
-            pl = pm[1]
-        }else{
-            pl = 0.5*sum(pm[1:uid]) + 0.5*sum(pm[1:(uid-1)])
-        }
-        return(pu + pl)
-    }
-}
+# Compute exact probability of Type I error for each method: Exact, ESPA, ESPACC, DSPACC and normal approximation
 
 
-
-# Regner ut sannsynlighet for type-1 feil i intercept-modell
-
-
-# Velg signifikansnivå,
+# Significance level alpha = 0.05 and alpha = 5e-05 is chosen.
 # n (sample size)
-# velg komposisjon av g-vektor (n0, n1, n2)
+# Choose composition of g-vector (n0, n1, n2)
 
-# Merk: veldig lave signifikansnivå med liten n 
-# kan føre til feilmeldinger i kode, fordi ingen
-# av u-verdiene i verdimengen gir liten nok sannsynlighet
 n = 1000
 n2 = 0; n1 = 20; n0 = 980
 g = c(rep(0,n0),rep(1,n1),rep(2,n2))
@@ -104,80 +39,81 @@ if(r == 1){
 ncases = 1:(n-1)
 
 
-# I disse vektorene skal det lagres
-# eksakt sannsynlighet for type-1 feil for de ulike
-# test-metodene
+# In these vectors, the exact probability of type I error for each muhat
+# and for each method is stored.
 
 signExact = c()
 signSPA = c()
 signSPAcc = c()
 signDSPAcc = c()
 signNorm = c()
-signMidP = c()
 
 c = 0
+#Evalute for muhat = 0.001 to 0.999
 for(nc in ncases){
     c = c + 1
     
     print(nc)
     
-    mu = nc/n    # muhat for dette antall kasus
+    mu = nc/n    #muhat for this number of cases
     
-    muhat = rep(mu,n) # vektor som brukes i tester
+    muhat = rep(mu,n) #muhat a constant for intercept model
     
-    ran = round(c(-sum(g)*mu, (1-mu)*sum(g)),2) # range
-    uvals = round(seq(ran[1],ran[2],1),2) # alle u-verdier i range
+    ran = round(c(-sum(g)*mu, (1-mu)*sum(g)),2) # The support can be no larger than this range
+    uvals = round(seq(ran[1],ran[2],1),2) # alle possible score observations in this range
     
-    pm = pmf_condscore(uvals,n0,n1,n2,nc,mu) # eksakte sannsynligheter
+    pm = pmf_condscore(uvals,n0,n1,n2,nc,mu) # Exact probabilities for each observation
     #Correct the range as ran is lower and upper bounds, not exact bounds:
-    #We can find the true range by looking at which uvals that have zero probability according to exact distribution
+    #We can find the true range by looking at which uvals that have zero probability according to the exact distribution
     gtz = which(pm > 0)
     ran_true = c(uvals[gtz[1]],uvals[gtz[length(gtz)]])
-    uvals_true = round(seq(ran_true[1],ran_true[2],1),2)
+    uvals = round(seq(ran_true[1],ran_true[2],1),2)
     
-    # En funksjon som returnerer sanns. for type-1 feil til 
-    # eksakt test, i tillegg til øvre t1[2] og nedre t1[3]
-    # kritiske verdi (NA hvis ikke øvre/nedre fører til forkastning)
+    # The function find_t1error finds the proability of type I error
+    # for the exact test, in addition to upper t1[2] and lower t1[3]
+    # critical value (NA if there can be no rejection)
     
     t1 = find_t1error(ran,uvals,pm,alpha)  
     
-    signExact[c] = t1[1] # eksakt test type-1 feil
-    crit = t1[2] # kritisk verdi i høyre hale fra eksakt test
+    signExact[c] = t1[1] # exact test type I error
+    crit = t1[2] # Critical value in right tail from exact test
     
     
     ############################################################    
     if( !is.na(crit) & (((uvals[crit]-3) > abs(ran[1])) | (uvals[crit]-3) < 0)){
-        # hvis TRUE:
-        # Fordelingen til testobservator er right-skew
-        # og vi startet søk etter (approksimerte) kritiske 
-        # så langt ut i høyre hale at bare høyre-sidig test er vurdert
+        # If TRUE:
+        # The distribution to the test statistic is right-skew,
+        # and we start the search three grid-values closer to zero from the critical point of exact test (rejection may occur before critical point for approximation methods),
+        # for the approximation methods. Even at this start point, a one-tailed test will be calculated,
+	#and we assume only a one-tailed test will give rejection
+	#Also if starting point is negative, critical point is not far so zero, indicating a highly right-skew distribution, and we will assume only a one-tailed test will give rejection.
     ############################################################ 
         
         
         #################
-        # SPA
+        # ESPA
         #################
         uid = max(crit-3,which(uvals>0)[1]) 
         
-        # uid er der vi starter vi søket vårt, tre verdier lenger inn mot
-        # midten enn eksakt test (eller laveste positive u-verdi)
+        # uid is where we start our search, tre grid-values closer
+        # to zero than exact test (or smallest positive u-value)
         
-        # regner ut forkastningssannsynlighet for uvals[uid]
-        # og itererer deretter utover i halen til vi finner 
-        # approksimert kritiske verdi
+        # Calculate probability of rejection for uvals[uid]
+        # and iterate along the tail until we find 
+        # the critical value for ESPA
         
         tmpSPA = singlesaddle2_BN(uvals[uid],gtilde,muhat,ran)
         while((tmpSPA > alpha) & (uid < length(uvals_true))){
             uid = uid+1
             if(uid == length(uvals_true)){
-                # Obs: gjør en korreksjon dersom vi kommer helt ut i halen
+                # NB: We need to do correction is we are on the boundary on the support (saddlepoint approximation not defined on the boundary of the support)
                 tmpSPA = singlesaddle2_BN(uvals[uid]-0.5,gtilde,muhat,ran)
             }else{
                 tmpSPA = singlesaddle2_BN(uvals[uid],gtilde,muhat,ran)
             }
         }
         if(tmpSPA > alpha){
-            # Helt ytterst i halen ga ikke forkastning
+            # Even on the boundary there was no rejection, probability of Type I error is zero
             signSPA[c] = 0
         }else{
             signSPA[c] = sum(pm[uid:length(pm)])
@@ -186,7 +122,7 @@ for(nc in ncases){
         
         
         #################
-        # SPAcc
+        # ESPACC
         #################
         uid = max(crit-3,which(uvals>0)[1])
         
@@ -209,7 +145,7 @@ for(nc in ncases){
         
         
         #################
-        # DSPAcc
+        # DSPACC
         #################
         uid = max(crit-3,which(uvals>0)[1])
         
@@ -231,45 +167,20 @@ for(nc in ncases){
         critDSPAcc = uid
         
         
-        #################
-        # midPexact
-        #################
-        uid = max(crit-3,which(uvals>0)[1])
-        
-        tmpMidP = 0.5*sum(pm[uid:length(pm)]) + 0.5*sum(pm[(uid+1):length(pm)])
-        while((tmpMidP > alpha) & (uid < length(uvals))){
-            uid = uid + 1
-            if(uid == length(uvals)){
-                tmpMidP = sum(pm[uid:length(pm)])
-            }else{
-                tmpMidP = 0.5*sum(pm[uid:length(pm)]) + 0.5*sum(pm[(uid+1):length(pm)])
-            }
-        }
-        
-        if(tmpMidP > alpha){
-            signMidP[c] = 0
-        }else{
-            signMidP[c] = sum(pm[uid:length(pm)])
-        }
-        critMidP = uid
-        
-        
-        
     ############################################################    
     }else if(!is.na(crit)){
-        # hvis TRUE:
-        # Eksakt test har (i hvert fall) forkasningsregel fra høyre hale
-        # men enten to-sidig forkastning eller en-sidig som ligger
-        # så "nærme" to-sidig at vi bør sjekke for to-sidige tester
-        # med approksimasjonsmetodene
+        # If TRUE:
+        # Exact test has (at least) rejection at some place on the right tail
+        # but there may be rejection on the left tail as well since the distribution is not that skewed
+        # We need to investigate both tails:
     ############################################################    
         
         #################
-        # SPA
+        # ESPA
         #################
         
-        # Først søker vi utover i høyre hale
-        # uposid er der vi starter søket
+        # Explore the right tail first:
+        # uposid is where we start the search
         uposid = max(crit-3,which(uvals>0)[1])
         
         tmpSPA = singlesaddle2_BN(uvals[uposid],gtilde,muhat,ran)
@@ -283,21 +194,21 @@ for(nc in ncases){
         }
         
         if(tmpSPA > alpha){
-            # Fant ikke noe forkastning i høyre halen
+            # No rejection at right tail
             critSPApos = NA
         }else{
-            # Forkastningsregel høyre hale
+            # Critical value for ESPA at right tail
             critSPApos = uposid
         }
         
-        # Deretter søker vi utover i i venstre hale
-        # unegid er der vi starter søket
-        # vi starter helt ute i halen og ser om det er 
-        # forkastning der, eller innover mot null
+        # Next, explore left tail
+        # unegid is where we start the search
+        # We start on the end of the tail and iterate
+        # toward zero
         unegid = 1
         tmpSPA = singlesaddle2_BN(uvals[unegid]+0.5,gtilde,muhat,ran)
         if(tmpSPA < alpha){ 
-        # hvis det går an å forkaste helt i venstre hale, søk innover
+        # If rejection at the end of the tail, continue to search towards zero
             while(tmpSPA < alpha){
                 unegid = unegid+1
                 tmpSPA = singlesaddle2_BN(uvals[unegid],gtilde,muhat,ran)
@@ -306,33 +217,33 @@ for(nc in ncases){
             critSPAneg = unegid
             
             if(is.na(critSPApos)){
-                # Fant ikke noe forkastning i høyre halen
-                # sanns. for type-1 feil bare fra venstre hale
+                # No rejection at right tail
+                # Probability for type I error given by:
                 signSPA[c] = sum(pm[1:critSPAneg])
             }else{
-                # sanns. for type-1 feil fra to-sidig forkastningsområde
+                # Rejections at both tails:
                 signSPA[c] = sum(pm[1:critSPAneg]) + sum(pm[critSPApos:length(pm)])
             }
             
         }else{
-        # ikke mulig å forkaste helt i venstre hale, høyre-sidig test
+        # Not possible to reject on the left tail.
             
             critSPAneg = NA
             if(is.na(critSPApos)){
-                # Fant ikke noe forkastning i den høyre halen heller
+                # No rejection, type I error probability is zero
                 signSPA[c] = 0
             }else{
-                # sanns. for type-1 feil bare fra høyre hale
+                # Type I error probability contribution from the right tail
                 signSPA[c] = sum(pm[critSPApos:length(pm)])
             }
         }
         
 
         #################
-        # SPAcc
+        # ESPACC
         #################
         
-        # Fra høyre hale
+        # From right tail
         uposid = max(crit-3,which(uvals>0)[1])
         tmpSPAcc = singlesaddle2_SCC_BN(uvals[uposid],gtilde,muhat,ran)
         
@@ -351,7 +262,7 @@ for(nc in ncases){
             critSPAccpos = uposid
         }
         
-        # Fra venstre hale
+        # From left tail
         unegid = 1
         tmpSPAcc = singlesaddle2_SCC_BN(uvals[unegid]+0.5,gtilde,muhat,ran)
         if(tmpSPAcc < alpha){
@@ -379,10 +290,10 @@ for(nc in ncases){
         
         
         #################
-        # DSPAcc
+        # DSPACC
         #################
         
-        # Fra høyre hale
+        # From right tail
         uposid = max(crit-3,which(uvals>0)[1])
         tmpDSPAcc = doublesaddle2_SCC_BN(uvals[uposid],x,muhat,ran)
         
@@ -400,7 +311,7 @@ for(nc in ncases){
             critDSPAccpos = uposid
         }
         
-        # Fra venstre hale
+        # From left tail
         unegid = 1
         tmpDSPAcc = doublesaddle2_SCC_BN(uvals[unegid]+0.5,x,muhat,ran)
         if(tmpDSPAcc < alpha){
@@ -427,70 +338,21 @@ for(nc in ncases){
         }
         
         
-        
-        #################
-        # MidPExact
-        #################
-        
-        # Fra høyre hale
-        uposid = max(crit-3,which(uvals>0)[1])
-        
-        tmpMidP = midp(uposid,uvals,ran,pm)
-        
-        while(tmpMidP > alpha & uposid < length(uvals)){
-            uposid = uposid+1
-            tmpMidP = midp(uposid,uvals,ran,pm)
-        }
-        if(tmpMidP > alpha){
-            critMidPpos = NA
-        }else{
-            critMidPpos = uposid
-        }
-        
-        # Fra venstre hale
-        unegid = 1
-        tmpMidP = midp(unegid,uvals,ran,pm)
-        if(tmpMidP < alpha){
-            while(tmpMidP < alpha){
-                unegid = unegid+1
-                tmpMidP = midp(unegid,uvals,ran,pm)
-            }
-            unegid = unegid-1
-            critMidPneg = unegid
-            
-            if(is.na(critMidPpos)){
-                signMidP[c] = sum(pm[1:critMidPneg])
-            }else{
-                signMidP[c] = sum(pm[1:critMidPneg]) + sum(pm[critMidPpos:length(pm)])
-            }
-            
-        }else{
-            critMidPneg = NA
-            if(is.na(critMidPpos)){
-                signMidP[c] = 0
-            }else{
-                signMidP[c] = sum(pm[critMidPpos:length(pm)])
-            }
-        }
-        
-        
-        
-        
-    ############################################################ 
+    ############################################################    
     }else{
-        # Fordelingen er left-skew og forkastning bare i venstre
-        # hale
+        # Distribution is left-skewed and rejection only in left
+        # rail
     ############################################################ 
-        crit = t1[3] # eksakt test kritisk verdi i venstre hale
+        crit = t1[3] # exact test critical value in left tail
         
         
         #################
-        # SPA
+        # ESPA
         #################
         
-        # Starter søket i uid tre hakk inn fra eksakt kritisk verdi
-        # eller minste negative u-verdi
-        # Søker deretter utover i halen
+        # Start the seach in uid tre grid-value closer to zero from critical value
+        # or least negative u-value
+        # Seach towards the end of the left tail
         uid = min(crit+3,which(uvals<0)[length(which(uvals<0))])
         
         tmpSPA = singlesaddle2_BN(uvals[uid],gtilde,muhat,ran)
@@ -504,7 +366,7 @@ for(nc in ncases){
         }
         
         if (tmpSPA > alpha){
-            # fant ikke noen u-verdi som gir forkastning 
+            # Found no rejection at left tail for ESPA 
             signSPA[c] = 0
         }else{
             signSPA[c] = sum(pm[1:uid])
@@ -513,7 +375,7 @@ for(nc in ncases){
         
         
         #################
-        # SPAcc
+        # SPACC
         #################
         uid = min(crit+3,which(uvals<0)[length(which(uvals<0))])
         
@@ -536,7 +398,7 @@ for(nc in ncases){
         
         
         #################
-        # DSPAcc
+        # DSPACC
         #################
         uid = min(crit+3,which(uvals<0)[length(which(uvals<0))])
         
@@ -559,43 +421,20 @@ for(nc in ncases){
         
         
         
-        #################
-        # MidPExact
-        #################
-        uid = min(crit+3,which(uvals<0)[length(which(uvals<0))])
-        
-        tmpMidP = 0.5*sum(pm[1:uid]) + 0.5*sum(pm[1:(uid-1)])
-        while(tmpMidP > alpha & uid > 1){
-            uid = uid - 1
-            if(uid == 1){
-                tmpMidP = pm[1]
-            }else{
-                tmpMidP = 0.5*sum(pm[1:uid]) + 0.5*sum(pm[1:(uid-1)])
-            }
-        }
-        
-        if (tmpMidP > alpha){
-            signMidP[c] = 0
-        }else{
-            signMidP[c] = sum(pm[1:uid])
-        }
-        critMidP = uid
-        
     }
     
     
     ############################################################ 
-    # normaltilnærming
+    # Normal approximation
     ############################################################ 
-    sdu = sqrt(mu*(1-mu)*sum(gtilde^2)) # standardavvik
-    steps = round(min(uvals[uvals>0]),2) # "desimalene" etter positive heltall
-    steps_neg = abs(steps-1) # "desimalene" etter negative heltall
-    tmp = qnorm(0.5*alpha,0,sdu,lower.tail = FALSE) # kritisk verdi
+    sdu = sqrt(mu*(1-mu)*sum(gtilde^2)) # standard deviation
+    steps = round(min(uvals[uvals>0]),2) # The decimals of the positive grid points
+    steps_neg = abs(steps-1) # The decimals of the negative integer grid points
+    tmp = qnorm(0.5*alpha,0,sdu,lower.tail = FALSE) # (positive) critical value
     
-    # Nå må vi finne tilsvarende u-verdier slik at vi kan regne
-    # eksakt sannsynlighet
+    # Find the grid points on the support of the exact distribution closest to the positive and negative critical value of the normal approximaton
     
-    # høyre hale
+    # Right tail
     if(0 %in% uvals){
         crit_norm = ceiling(tmp)
         crit_norm_inv = floor(-tmp)
@@ -606,10 +445,6 @@ for(nc in ncases){
         crit_norm = ceiling(tmp) + steps
         crit_norm_inv = ifelse(-tmp < ceiling(-tmp) -steps_neg,ceiling(-tmp) -steps_neg-1,ceiling(-tmp) -steps_neg)
     }
-    
-    # venstre hale
-    #crit_norm_inv = crit_norm-sign(crit_norm)*ceiling(2*abs(crit_norm))
-    #Vi m� benytte oss av forkastningsomr�det til normalfordelingen, se over:
     
     
     if(crit_norm_inv>=ran[1] & crit_norm <= ran[2]){
@@ -644,11 +479,11 @@ mumin = 0.05
 mumax = 0.95
 mus = round(seq(mumin,mumax,0.01),2)
 
-# Type-1 feil for hver metode for ulike verdier av mu (under H0)
+# Type I error for each method for different values of true mu values (under H0)
 t1error = matrix(NA,ncol = 6, nrow = length(mus))
 
-# Sannsynlighet for å få et datasett der tester
-# ikke holder nivået sitt
+# Probability of getting a data set where
+# test is not valid (conditionally invalid test)
 probab_invalid = matrix(NA,ncol = 6, nrow = length(mus))
 
 muno = 0
@@ -698,8 +533,6 @@ t1error = as.data.frame(t1error)
 probab_invalid = as.data.frame(probab_invalid)
 
 
-#df = data.frame(t1error)
-#df = melt(df)
 df= data.frame(mu = rep(mus,5))
 df$t1errors = c(t1error$Exact,t1error$SPA,t1error$SPACC,t1error$DSPACC,t1error$Norm)
 df$Method = c(rep("Exact",nrow(t1error)),rep("ESPA",nrow(t1error)),rep("ESPA-CC",nrow(t1error)),rep("DSPA-CC",nrow(t1error)),rep("Norm",nrow(t1error)))
@@ -723,8 +556,6 @@ p1 = ggplot(df, aes(x = mu, y = t1errors, color = Method)) +
 
 p1
 
-#df3 = data.frame(variable = unique(df2$variable),
-#                 prop_invalid = prop_invalid)
 
 p2 = ggplot(df2, aes(x = mu, y = probab_invalids,
                      color = Method)) +
@@ -736,10 +567,6 @@ p2 = ggplot(df2, aes(x = mu, y = probab_invalids,
     ggtitle(paste0("Signif. level ",alpha)) +
     labs(x=expression(mu))+
     scale_x_continuous(breaks = seq(0.1,0.9,0.1)) #+ 
-    #geom_hline(data = df3, 
-    #           aes(yintercept = prop_invalid, color = variable),
-    #           lty =2)
-
 
 
 p2
@@ -757,8 +584,6 @@ p2
     
     p3
     
-    #df3 = data.frame(variable = unique(df2$variable),
-    #                 prop_invalid = prop_invalid)
     
     p4 = ggplot(df2, aes(x = mu, y = probab_invalids,
                          color = Method)) +
@@ -770,11 +595,6 @@ p2
         ggtitle(paste0("Signif. level ",alpha)) +
         labs(x=expression(mu))+
         scale_x_continuous(breaks = seq(0.1,0.9,0.1)) #+ 
-    #geom_hline(data = df3, 
-    #           aes(yintercept = prop_invalid, color = variable),
-    #           lty =2)
-    
-    
     
     p4    
     
